@@ -1,0 +1,841 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sheets Tetris</title>
+  <style>
+    :root {
+      --bg: #0b1120;
+      --panel: #0f172a;
+      --panel-2: #1e293b;
+      --border: #334155;
+      --accent: #38bdf8;
+      --accent-glow: rgba(56, 189, 248, 0.25);
+      --gold: #facc15;
+      --green: #34d399;
+      --purple: #a78bfa;
+      --red: #f87171;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+    }
+
+    * {
+      box-sizing: border-box;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      min-height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Roboto Mono", monospace;
+      overflow-x: hidden;
+    }
+
+    .app {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 10px;
+      max-width: 300px;
+      margin: 0 auto;
+    }
+
+    /* Header */
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 8px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+
+    .title {
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.06em;
+      color: var(--accent);
+    }
+
+    .sync-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 9px;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 999px;
+      background: rgba(148, 163, 184, 0.12);
+      color: var(--muted);
+      border: 1px solid rgba(148, 163, 184, 0.25);
+    }
+
+    .sync-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--muted);
+    }
+
+    .sync-pill.synced {
+      color: var(--green);
+      border-color: rgba(52, 211, 153, 0.35);
+      background: rgba(52, 211, 153, 0.1);
+    }
+    .sync-pill.synced .sync-dot { background: var(--green); }
+
+    .sync-pill.syncing {
+      color: var(--gold);
+      border-color: rgba(250, 204, 21, 0.35);
+      background: rgba(250, 204, 21, 0.1);
+    }
+    .sync-pill.syncing .sync-dot { background: var(--gold); }
+
+    .sync-pill.error {
+      color: var(--red);
+      border-color: rgba(248, 113, 113, 0.35);
+      background: rgba(248, 113, 113, 0.1);
+    }
+    .sync-pill.error .sync-dot { background: var(--red); }
+
+    /* HUD Stats */
+    .hud-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 5px;
+    }
+
+    .stat {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 4px 5px;
+      text-align: center;
+    }
+
+    .stat-label {
+      font-size: 8px;
+      font-weight: 700;
+      color: var(--muted);
+      letter-spacing: 0.05em;
+    }
+
+    .stat-value {
+      font-size: 12px;
+      font-weight: 800;
+      margin-top: 1px;
+    }
+
+    .stat-score { color: var(--gold); }
+    .stat-high { color: var(--green); }
+    .stat-level { color: var(--accent); }
+    .stat-lines { color: var(--text); }
+
+    /* Stage: Canvas + Side previews */
+    .stage {
+      display: flex;
+      gap: 8px;
+      justify-content: center;
+      align-items: flex-start;
+    }
+
+    .board-wrap {
+      position: relative;
+      width: 154px;
+      height: 304px;
+      border-radius: 8px;
+      border: 2px solid var(--accent);
+      box-shadow: 0 0 14px var(--accent-glow);
+      background: #111827;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+
+    #boardCanvas {
+      display: block;
+      width: 150px;
+      height: 300px;
+    }
+
+    .overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(11, 17, 32, 0.82);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 10px;
+      gap: 6px;
+      transition: opacity 0.15s ease;
+    }
+
+    .overlay.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .overlay-title {
+      font-size: 14px;
+      font-weight: 800;
+      color: var(--accent);
+      letter-spacing: 0.08em;
+    }
+
+    .overlay-sub {
+      font-size: 10px;
+      color: var(--muted);
+      line-height: 1.4;
+    }
+
+    .clear-toast {
+      position: absolute;
+      left: 50%;
+      top: 12px;
+      transform: translateX(-50%);
+      background: rgba(15, 23, 42, 0.92);
+      border: 1px solid var(--gold);
+      color: var(--gold);
+      font-size: 10px;
+      font-weight: 800;
+      padding: 2px 8px;
+      border-radius: 999px;
+      letter-spacing: 0.08em;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.2s ease;
+    }
+
+    .clear-toast.visible {
+      opacity: 1;
+    }
+
+    .side-col {
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+      width: 106px;
+    }
+
+    .preview-card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 7px;
+      padding: 5px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .preview-label {
+      font-size: 9px;
+      font-weight: 800;
+      color: var(--accent);
+      letter-spacing: 0.08em;
+    }
+
+    .preview-canvas {
+      display: block;
+      width: 64px;
+      height: 64px;
+      background: #111827;
+      border-radius: 4px;
+      border: 1px solid #1f2937;
+    }
+
+    /* Buttons */
+    .btn {
+      appearance: none;
+      border: 1px solid var(--border);
+      background: var(--panel-2);
+      color: var(--text);
+      font-family: inherit;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 6px 8px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: transform 0.05s ease, background 0.12s ease, border-color 0.12s ease;
+      text-align: center;
+    }
+
+    .btn:hover {
+      background: #273549;
+      border-color: #475569;
+    }
+
+    .btn:active {
+      transform: translateY(1px);
+    }
+
+    .btn-primary {
+      background: linear-gradient(180deg, #0284c7, #0369a1);
+      border-color: var(--accent);
+      color: #fff;
+    }
+
+    .btn-primary:hover {
+      background: linear-gradient(180deg, #0ea5e9, #0284c7);
+    }
+
+    .btn-danger {
+      background: rgba(239, 68, 68, 0.14);
+      border-color: rgba(248, 113, 113, 0.4);
+      color: #fca5a5;
+    }
+
+    .btn-danger:hover {
+      background: rgba(239, 68, 68, 0.24);
+    }
+
+    .btn-drop {
+      background: rgba(56, 189, 248, 0.15);
+      border-color: rgba(56, 189, 248, 0.45);
+      color: #7dd3fc;
+    }
+
+    .btn-drop:hover {
+      background: rgba(56, 189, 248, 0.25);
+    }
+
+    /* Arcade Controls Pad */
+    .controls-panel {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 7px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .ctrl-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 5px;
+    }
+
+    .ctrl-row-full {
+      display: grid;
+      grid-template-columns: 1fr;
+    }
+
+    .btn-pad {
+      padding: 8px 4px;
+      font-size: 11px;
+    }
+
+    /* Keyboard Legend */
+    .legend {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px 8px;
+      font-size: 9px;
+      color: var(--muted);
+      line-height: 1.5;
+      text-align: center;
+    }
+
+    .legend b {
+      color: var(--text);
+    }
+  </style>
+</head>
+<body>
+  <div class="app" id="appRoot" tabindex="0">
+    <!-- Header -->
+    <div class="header">
+      <div class="title">🕹️ SHEETS TETRIS</div>
+      <div class="sync-pill" id="syncPill" title="Google Sheet cell sync status">
+        <span class="sync-dot"></span>
+        <span id="syncText">READY</span>
+      </div>
+    </div>
+
+    <!-- HUD -->
+    <div class="hud-grid">
+      <div class="stat">
+        <div class="stat-label">SCORE</div>
+        <div class="stat-value stat-score" id="scoreVal">0</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">HIGH</div>
+        <div class="stat-value stat-high" id="highVal">0</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">LEVEL</div>
+        <div class="stat-value stat-level" id="levelVal">1</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">LINES</div>
+        <div class="stat-value stat-lines" id="linesVal">0</div>
+      </div>
+    </div>
+
+    <!-- Stage -->
+    <div class="stage">
+      <div class="board-wrap">
+        <canvas id="boardCanvas" width="150" height="300"></canvas>
+        <div class="clear-toast" id="clearToast">TETRIS!</div>
+        <div class="overlay" id="boardOverlay">
+          <div class="overlay-title" id="overlayTitle">SHEETS TETRIS</div>
+          <div class="overlay-sub" id="overlaySub">Press Start or Enter<br />to play in Google Sheets</div>
+        </div>
+      </div>
+
+      <div class="side-col">
+        <div class="preview-card">
+          <div class="preview-label">NEXT</div>
+          <canvas id="nextCanvas" class="preview-canvas" width="64" height="64"></canvas>
+        </div>
+
+        <div class="preview-card">
+          <div class="preview-label">HOLD</div>
+          <canvas id="holdCanvas" class="preview-canvas" width="64" height="64"></canvas>
+        </div>
+
+        <button class="btn btn-primary" id="btnStartPause" type="button">▶ Start</button>
+        <button class="btn" id="btnRestart" type="button">↻ Restart</button>
+        <button class="btn btn-danger" id="btnResetSheet" type="button">▦ Reset Sheet</button>
+      </div>
+    </div>
+
+    <!-- Clickable Arcade Pad -->
+    <div class="controls-panel">
+      <div class="ctrl-row">
+        <button class="btn btn-pad" id="btnRotCCW" type="button" title="Rotate CCW (Z)">⟲ CCW</button>
+        <button class="btn btn-pad" id="btnRotCW" type="button" title="Rotate CW (↑ / X)">⟳ CW</button>
+        <button class="btn btn-pad" id="btnHold" type="button" title="Hold Piece (C / Shift)">HOLD</button>
+      </div>
+      <div class="ctrl-row">
+        <button class="btn btn-pad" id="btnLeft" type="button" title="Move Left (←)">◀</button>
+        <button class="btn btn-pad" id="btnDown" type="button" title="Soft Drop (↓)">▼</button>
+        <button class="btn btn-pad" id="btnRight" type="button" title="Move Right (→)">▶</button>
+      </div>
+      <div class="ctrl-row-full">
+        <button class="btn btn-pad btn-drop" id="btnHardDrop" type="button" title="Hard Drop (Space)">⬇ HARD DROP (SPACE)</button>
+      </div>
+    </div>
+
+    <!-- Keyboard Legend -->
+    <div class="legend">
+      <b>←/→</b> Move &nbsp;•&nbsp; <b>↓</b> Soft &nbsp;•&nbsp; <b>Space</b> Drop<br />
+      <b>↑/X</b> CW &nbsp;•&nbsp; <b>Z</b> CCW &nbsp;•&nbsp; <b>C/Shift</b> Hold &nbsp;•&nbsp; <b>P</b> Pause &nbsp;•&nbsp; <b>R</b> Restart
+    </div>
+  </div>
+
+  <script>
+/*__TETRIS_CORE_INJECT__*/
+  </script>
+
+  <script>
+    (function () {
+      'use strict';
+
+      const Core = window.TetrisCore;
+      if (!Core) {
+        console.error('TetrisCore not found.');
+        return;
+      }
+
+      const game = Core.createGame();
+      const STATUS = Core.STATUS;
+      const EMPTY_COLOR = Core.EMPTY_COLOR || '#111827';
+      const GHOST_SET = new Set(Object.values(Core.GHOST_COLORS || {}));
+
+      // DOM refs
+      const appRoot = document.getElementById('appRoot');
+      const boardCanvas = document.getElementById('boardCanvas');
+      const nextCanvas = document.getElementById('nextCanvas');
+      const holdCanvas = document.getElementById('holdCanvas');
+      const boardCtx = boardCanvas.getContext('2d');
+      const nextCtx = nextCanvas.getContext('2d');
+      const holdCtx = holdCanvas.getContext('2d');
+
+      const scoreEl = document.getElementById('scoreVal');
+      const highEl = document.getElementById('highVal');
+      const levelEl = document.getElementById('levelVal');
+      const linesEl = document.getElementById('linesVal');
+      const syncPill = document.getElementById('syncPill');
+      const syncText = document.getElementById('syncText');
+      const overlay = document.getElementById('boardOverlay');
+      const overlayTitle = document.getElementById('overlayTitle');
+      const overlaySub = document.getElementById('overlaySub');
+      const clearToast = document.getElementById('clearToast');
+      const btnStartPause = document.getElementById('btnStartPause');
+      const btnRestart = document.getElementById('btnRestart');
+      const btnResetSheet = document.getElementById('btnResetSheet');
+
+      let highScore = 0;
+      let lastClearShown = '';
+      let toastTimer = null;
+      let lastFrameTime = 0;
+
+      // Coalesced google.script.run state
+      const hasAppsScript =
+        typeof google !== 'undefined' &&
+        google &&
+        google.script &&
+        google.script.run;
+
+      let syncInFlight = false;
+      let syncDirty = false;
+      let latestPayload = null;
+      let syncCoalesceTimer = null;
+
+      function setSyncState(cls, text) {
+        syncPill.className = 'sync-pill' + (cls ? ' ' + cls : '');
+        syncText.textContent = text;
+      }
+
+      function updateHighScoreUI(val) {
+        const num = Number(val) || 0;
+        if (num > highScore) {
+          highScore = num;
+        }
+        highEl.textContent = String(highScore);
+      }
+
+      function requestSheetSync(payload, immediate) {
+        latestPayload = payload;
+        if (!hasAppsScript) {
+          setSyncState('', 'LOCAL');
+          return;
+        }
+        syncDirty = true;
+        if (syncInFlight) return;
+
+        if (immediate) {
+          if (syncCoalesceTimer) {
+            clearTimeout(syncCoalesceTimer);
+            syncCoalesceTimer = null;
+          }
+          flushSheetSync();
+        } else if (!syncCoalesceTimer) {
+          syncCoalesceTimer = setTimeout(function () {
+            syncCoalesceTimer = null;
+            flushSheetSync();
+          }, 45);
+        }
+      }
+
+      function flushSheetSync() {
+        if (!hasAppsScript || syncInFlight || !syncDirty || !latestPayload) return;
+        syncInFlight = true;
+        syncDirty = false;
+        const payloadToSend = latestPayload;
+        setSyncState('syncing', 'SYNCING');
+
+        try {
+          google.script.run
+            .withSuccessHandler(function (res) {
+              syncInFlight = false;
+              if (res && typeof res.highScore === 'number') {
+                updateHighScoreUI(res.highScore);
+              }
+              if (syncDirty) {
+                flushSheetSync();
+              } else {
+                setSyncState('synced', 'SYNCED');
+              }
+            })
+            .withFailureHandler(function (err) {
+              syncInFlight = false;
+              console.error('renderFrame failed:', err);
+              setSyncState('error', 'RETRY');
+              if (syncDirty) {
+                setTimeout(flushSheetSync, 500);
+              }
+            })
+            .renderFrame(payloadToSend);
+        } catch (err) {
+          syncInFlight = false;
+          console.error('google.script.run error:', err);
+          setSyncState('error', 'ERROR');
+        }
+      }
+
+      function drawGrid(ctx, matrix, cellSize) {
+        const rows = matrix.length;
+        const cols = rows > 0 ? matrix[0].length : 0;
+
+        ctx.fillStyle = EMPTY_COLOR;
+        ctx.fillRect(0, 0, cols * cellSize, rows * cellSize);
+
+        for (let r = 0; r < rows; r++) {
+          for (let c = 0; c < cols; c++) {
+            const color = matrix[r][c] || EMPTY_COLOR;
+            const x = c * cellSize;
+            const y = r * cellSize;
+
+            if (color === EMPTY_COLOR) {
+              ctx.strokeStyle = '#1f2937';
+              ctx.lineWidth = 1;
+              ctx.strokeRect(x + 0.5, y + 0.5, cellSize - 1, cellSize - 1);
+            } else if (GHOST_SET.has(color)) {
+              ctx.fillStyle = color;
+              ctx.fillRect(x + 1, y + 1, cellSize - 2, cellSize - 2);
+              ctx.strokeStyle = 'rgba(248, 250, 252, 0.35)';
+              ctx.lineWidth = 1;
+              ctx.strokeRect(x + 1.5, y + 1.5, cellSize - 3, cellSize - 3);
+            } else {
+              ctx.fillStyle = color;
+              ctx.fillRect(x + 1, y + 1, cellSize - 2, cellSize - 2);
+              // Subtle top-left highlight bevel
+              ctx.fillStyle = 'rgba(255, 255, 255, 0.22)';
+              ctx.fillRect(x + 1, y + 1, cellSize - 2, 2);
+              ctx.fillRect(x + 1, y + 1, 2, cellSize - 2);
+              // Subtle bottom-right shadow
+              ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
+              ctx.fillRect(x + 1, y + cellSize - 3, cellSize - 2, 2);
+            }
+          }
+        }
+      }
+
+      function showClearToast(label) {
+        if (!label) return;
+        clearToast.textContent = label + '!';
+        clearToast.classList.add('visible');
+        if (toastTimer) clearTimeout(toastTimer);
+        toastTimer = setTimeout(function () {
+          clearToast.classList.remove('visible');
+        }, 900);
+      }
+
+      function renderUI(syncToSheet, immediateSync) {
+        const payload = game.getRenderPayload();
+        drawGrid(boardCtx, payload.boardColors, 15);
+        drawGrid(nextCtx, payload.nextColors, 16);
+        drawGrid(holdCtx, payload.holdColors, 16);
+
+        const hud = payload.hud;
+        scoreEl.textContent = String(hud.score);
+        if (hud.score > highScore) {
+          updateHighScoreUI(hud.score);
+        }
+        levelEl.textContent = String(hud.level);
+        linesEl.textContent = String(hud.lines);
+
+        if (hud.lastClear && hud.lastClear !== lastClearShown) {
+          lastClearShown = hud.lastClear;
+          showClearToast(hud.lastClear);
+        } else if (!hud.lastClear) {
+          lastClearShown = '';
+        }
+
+        // Update Start/Pause button & overlay
+        if (hud.status === STATUS.READY) {
+          btnStartPause.textContent = '▶ Start';
+          overlay.classList.remove('hidden');
+          overlayTitle.textContent = 'SHEETS TETRIS';
+          overlaySub.innerHTML = 'Press Start or Enter<br />to play in Google Sheets';
+        } else if (hud.status === STATUS.PAUSED) {
+          btnStartPause.textContent = '▶ Resume';
+          overlay.classList.remove('hidden');
+          overlayTitle.textContent = 'PAUSED';
+          overlaySub.innerHTML = 'Press P or Resume<br />to continue';
+        } else if (hud.status === STATUS.GAME_OVER) {
+          btnStartPause.textContent = '▶ Play Again';
+          overlay.classList.remove('hidden');
+          overlayTitle.textContent = 'GAME OVER';
+          overlaySub.innerHTML = 'Score: ' + hud.score + '<br />Press R or Play Again';
+        } else {
+          btnStartPause.textContent = '⏸ Pause';
+          overlay.classList.add('hidden');
+        }
+
+        if (syncToSheet) {
+          requestSheetSync(payload, Boolean(immediateSync));
+        }
+      }
+
+      function handleStartOrPause() {
+        const st = game.status;
+        if (st === STATUS.READY || st === STATUS.GAME_OVER) {
+          game.start();
+          lastFrameTime = performance.now();
+          renderUI(true, true);
+        } else {
+          game.togglePause();
+          lastFrameTime = performance.now();
+          renderUI(true, true);
+        }
+      }
+
+      function handleRestart() {
+        game.restart();
+        lastFrameTime = performance.now();
+        renderUI(true, true);
+      }
+
+      function handleAction(actionFn, immediateSync) {
+        if (game.status !== STATUS.PLAYING) return;
+        const result = actionFn();
+        const changed = typeof result === 'object' && result !== null ? result.locked || result.dropped > 0 : Boolean(result);
+        if (changed) {
+          renderUI(true, Boolean(immediateSync));
+        }
+      }
+
+      // 60fps animation loop for smooth local preview & gravity timing
+      function loop(now) {
+        if (!lastFrameTime) lastFrameTime = now;
+        const dt = Math.min(now - lastFrameTime, 100);
+        lastFrameTime = now;
+
+        if (game.status === STATUS.PLAYING) {
+          const changed = game.tick(dt);
+          if (changed) {
+            renderUI(true, false);
+          }
+        }
+        window.requestAnimationFrame(loop);
+      }
+
+      // Keyboard controls
+      window.addEventListener('keydown', function (e) {
+        const key = e.key;
+        const code = e.code;
+
+        const handledKeys = [
+          'ArrowLeft', 'ArrowRight', 'ArrowDown', 'ArrowUp',
+          ' ', 'Spacebar', 'x', 'X', 'z', 'Z', 'c', 'C',
+          'Shift', 'p', 'P', 'r', 'R', 'Enter'
+        ];
+        if (handledKeys.indexOf(key) !== -1 || code === 'Space') {
+          e.preventDefault();
+        }
+
+        if (key === 'Enter' && (game.status === STATUS.READY || game.status === STATUS.GAME_OVER)) {
+          handleStartOrPause();
+          return;
+        }
+        if (key === 'p' || key === 'P') {
+          if (game.status === STATUS.PLAYING || game.status === STATUS.PAUSED) {
+            handleStartOrPause();
+          }
+          return;
+        }
+        if (key === 'r' || key === 'R') {
+          handleRestart();
+          return;
+        }
+
+        if (game.status !== STATUS.PLAYING) return;
+
+        switch (key) {
+          case 'ArrowLeft':
+            handleAction(function () { return game.moveLeft(); }, false);
+            break;
+          case 'ArrowRight':
+            handleAction(function () { return game.moveRight(); }, false);
+            break;
+          case 'ArrowDown':
+            handleAction(function () { return game.softDrop(); }, false);
+            break;
+          case 'ArrowUp':
+          case 'x':
+          case 'X':
+            handleAction(function () { return game.rotateCW(); }, false);
+            break;
+          case 'z':
+          case 'Z':
+            handleAction(function () { return game.rotateCCW(); }, false);
+            break;
+          case ' ':
+          case 'Spacebar':
+            handleAction(function () { return game.hardDrop(); }, true);
+            break;
+          case 'c':
+          case 'C':
+          case 'Shift':
+            handleAction(function () { return game.hold(); }, true);
+            break;
+          default:
+            if (code === 'Space') {
+              handleAction(function () { return game.hardDrop(); }, true);
+            }
+            break;
+        }
+      }, { passive: false });
+
+      // Button bindings (keep focus on window so keyboard keeps working)
+      function bindButton(id, handler) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.addEventListener('click', function () {
+          handler();
+          el.blur();
+          window.focus();
+        });
+      }
+
+      bindButton('btnStartPause', handleStartOrPause);
+      bindButton('btnRestart', handleRestart);
+      bindButton('btnLeft', function () { handleAction(function () { return game.moveLeft(); }, false); });
+      bindButton('btnRight', function () { handleAction(function () { return game.moveRight(); }, false); });
+      bindButton('btnDown', function () { handleAction(function () { return game.softDrop(); }, false); });
+      bindButton('btnRotCW', function () { handleAction(function () { return game.rotateCW(); }, false); });
+      bindButton('btnRotCCW', function () { handleAction(function () { return game.rotateCCW(); }, false); });
+      bindButton('btnHardDrop', function () { handleAction(function () { return game.hardDrop(); }, true); });
+      bindButton('btnHold', function () { handleAction(function () { return game.hold(); }, true); });
+
+      bindButton('btnResetSheet', function () {
+        if (!hasAppsScript) {
+          setSyncState('', 'LOCAL');
+          return;
+        }
+        setSyncState('syncing', 'RESETTING');
+        google.script.run
+          .withSuccessHandler(function (res) {
+            if (res && typeof res.highScore === 'number') {
+              updateHighScoreUI(res.highScore);
+            }
+            setSyncState('synced', 'SYNCED');
+            renderUI(true, true);
+          })
+          .withFailureHandler(function (err) {
+            console.error('setupBoard failed:', err);
+            setSyncState('error', 'ERROR');
+          })
+          .setupBoard();
+      });
+
+      // Keep keyboard focus active when clicking anywhere inside the sidebar
+      appRoot.addEventListener('click', function () {
+        window.focus();
+      });
+
+      // Initial load: fetch persisted high score & render initial empty board
+      if (hasAppsScript) {
+        setSyncState('syncing', 'LOADING');
+        google.script.run
+          .withSuccessHandler(function (score) {
+            updateHighScoreUI(score);
+            setSyncState('synced', 'READY');
+          })
+          .withFailureHandler(function () {
+            setSyncState('error', 'OFFLINE');
+          })
+          .getHighScore();
+      } else {
+        setSyncState('', 'LOCAL');
+      }
+
+      renderUI(false, false);
+      window.requestAnimationFrame(loop);
+    })();
+  </script>
+</body>
+</html>
